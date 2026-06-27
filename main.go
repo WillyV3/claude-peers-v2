@@ -13,12 +13,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// onlineSeconds: a peer is "online" if seen within this window. Also the
+// staleness cutoff for reclaiming an agent name from a session that went quiet.
+const onlineSeconds int64 = 30
+
 type Peer struct {
 	Agent    string `json:"agent"`
 	Machine  string `json:"machine"`
 	Cwd      string `json:"cwd"`
 	LastSeen int64  `json:"last_seen"`
 	Online   bool   `json:"online"`
+	Session  string `json:"session,omitempty"` // per-process id; distinguishes a reconnect from a name clash
 }
 
 // DeliverMode is how a message is injected into the recipient's agent runtime.
@@ -70,7 +75,8 @@ CREATE TABLE IF NOT EXISTS peers (
 	agent TEXT PRIMARY KEY,
 	machine TEXT,
 	cwd TEXT,
-	last_seen INTEGER NOT NULL
+	last_seen INTEGER NOT NULL,
+	session TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS messages (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,16 +135,42 @@ func (b *Broker) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	p.LastSeen = time.Now().Unix()
-	_, err := b.db.Exec(`
-		INSERT INTO peers(agent, machine, cwd, last_seen)
-		VALUES (?, ?, ?, ?)
+	if p.Agent == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "agent is required"})
+		return
+	}
+	now := time.Now().Unix()
+
+	// Reject taking a name another LIVE session already holds — stops two sessions
+	// (e.g. both defaulting to the same name in one cwd) from silently sharing an
+	// identity. A stale name (owner went quiet) or the same session reconnecting
+	// may take it over.
+	var exSession sql.NullString
+	var exSeen int64
+	switch err := b.db.QueryRow(`SELECT session, last_seen FROM peers WHERE agent = ?`, p.Agent).Scan(&exSession, &exSeen); err {
+	case nil:
+		live := now-exSeen < onlineSeconds
+		if live && exSession.String != "" && exSession.String != p.Session {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error": "agent name in use by another live session",
+				"hint":  "start with a unique PEER_NAME",
+			})
+			return
+		}
+	case sql.ErrNoRows:
+		// new name — fall through to insert
+	default:
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	if _, err := b.db.Exec(`
+		INSERT INTO peers(agent, machine, cwd, last_seen, session)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(agent) DO UPDATE SET
-			machine=excluded.machine,
-			cwd=excluded.cwd,
-			last_seen=excluded.last_seen`,
-		p.Agent, p.Machine, p.Cwd, p.LastSeen)
-	if err != nil {
+			machine=excluded.machine, cwd=excluded.cwd,
+			last_seen=excluded.last_seen, session=excluded.session`,
+		p.Agent, p.Machine, p.Cwd, now, p.Session); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
@@ -177,7 +209,7 @@ func (b *Broker) handlePeers(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
-		p.Online = (now-p.LastSeen) < 30
+		p.Online = (now-p.LastSeen) < onlineSeconds
 		peers = append(peers, p)
 	}
 	writeJSON(w, http.StatusOK, peers)
@@ -192,6 +224,10 @@ func (b *Broker) handleSend(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if body.From == "" || body.To == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "from and to are required"})
 		return
 	}
 	if body.DeliverAs == "" {
@@ -231,13 +267,11 @@ func (b *Broker) handleSend(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: createdAt,
 	}
 
-	delivered := b.fanout(body.To, msg)
-	if delivered {
-		now := time.Now().Unix()
-		b.db.Exec(`UPDATE messages SET delivered_at = ? WHERE id = ?`, now, id)
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"queued": !delivered})
+	// queued = no live subscriber accepted it now; it persists until the recipient
+	// connects and drains. delivered_at is set only after a successful stream write
+	// (see deliver), so a client dropping mid-write never silently loses the message.
+	livePickup := b.fanout(body.To, msg)
+	writeJSON(w, http.StatusOK, map[string]any{"queued": !livePickup})
 }
 
 func (b *Broker) fanout(to string, msg *Message) bool {
@@ -310,8 +344,8 @@ func (b *Broker) handleStream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case msg := <-ch:
-			if err := b.writeMessage(w, flusher, msg); err != nil {
-				log.Printf("write message: %v", err)
+			if err := b.deliver(w, flusher, msg); err != nil {
+				log.Printf("deliver: %v", err)
 				return
 			}
 		case <-ticker.C:
@@ -337,15 +371,22 @@ func (b *Broker) drain(agent string, w http.ResponseWriter, flusher http.Flusher
 		if err := rows.Scan(&msg.ID, &msg.From, &msg.To, &msg.Content, &msg.DeliverAs, &msg.CreatedAt); err != nil {
 			return err
 		}
-		if err := b.writeMessage(w, flusher, &msg); err != nil {
-			return err
-		}
-		now := time.Now().Unix()
-		if _, err := b.db.Exec(`UPDATE messages SET delivered_at = ? WHERE id = ?`, now, msg.ID); err != nil {
+		if err := b.deliver(w, flusher, &msg); err != nil {
 			return err
 		}
 	}
 	return rows.Err()
+}
+
+// deliver writes a message to the stream and marks it delivered ONLY on a
+// successful write. If the client drops mid-write, delivered_at stays NULL and
+// the message re-drains on the next connect — at-least-once, never silently lost.
+func (b *Broker) deliver(w http.ResponseWriter, flusher http.Flusher, msg *Message) error {
+	if err := b.writeMessage(w, flusher, msg); err != nil {
+		return err
+	}
+	_, err := b.db.Exec(`UPDATE messages SET delivered_at = ? WHERE id = ?`, time.Now().Unix(), msg.ID)
+	return err
 }
 
 func (b *Broker) writeMessage(w http.ResponseWriter, flusher http.Flusher, msg *Message) error {

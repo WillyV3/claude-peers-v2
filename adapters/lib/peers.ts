@@ -2,6 +2,7 @@
 // Adding a 5th runtime means writing one small file that calls connect() — nothing else here changes.
 
 import { hostname } from "node:os"
+import { randomUUID } from "node:crypto"
 
 export type PeerMessage = {
   id: number
@@ -27,6 +28,7 @@ export function connect(opts: {
   const me = opts.me
   const machine = opts.machine ?? hostname()
   const cwd = opts.cwd ?? process.cwd()
+  const session = randomUUID() // distinguishes a reconnect from a name clash
 
   function postJSON(path: string, body: unknown) {
     return fetch(broker + path, {
@@ -36,8 +38,15 @@ export function connect(opts: {
     })
   }
 
-  // Register once at start; heartbeat every 15s. Fire-and-forget — broker may not be up yet.
-  postJSON("/register", { agent: me, machine, cwd }).catch(() => {})
+  // Register once with our session id; heartbeat every 15s. A 409 means another
+  // live session already holds this name — warn loudly rather than silently share it.
+  postJSON("/register", { agent: me, machine, cwd, session })
+    .then((r) => {
+      if (r.status === 409) {
+        console.error(`[peers] name "${me}" is already in use by another live session — set a unique PEER_NAME`)
+      }
+    })
+    .catch(() => {})
   setInterval(() => postJSON("/heartbeat", { agent: me }).catch(() => {}), 15000)
 
   // SSE subscribe + parse; reconnect forever with a 1s delay. Comment frames (": ...") are
