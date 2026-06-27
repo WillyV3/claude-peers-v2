@@ -1,0 +1,11 @@
+# binaries
+/cpv2
+*.db
+*.db-shm
+*.db-wal
+# bun/node
+node_modules/
+adapters/node_modules/
+# scratch
+/tmp/
+/claude-peers-v2

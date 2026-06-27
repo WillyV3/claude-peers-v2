@@ -1,0 +1,19 @@
+# Real multi-container validation: one broker + a driver that exercises the
+# offline-queue at scale (N senders → an offline hub → hub connects and drains N).
+# The rigorous race/concurrency check is the Go `go test -race` load test; this proves
+# it works across real container boundaries.
+services:
+  broker:
+    build: .
+    environment:
+      CPV2_ADDR: 0.0.0.0:7900
+
+  driver:
+    build: .
+    depends_on: [broker]
+    environment:
+      CPV2_URL: http://broker:7900
+      N: "20"
+    entrypoint: ["/bin/sh", "/harness/driver.sh"]
+    volumes:
+      - ./harness:/harness:ro
