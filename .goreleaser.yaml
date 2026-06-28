@@ -28,6 +28,16 @@ archives:
   - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
+nfpms:
+  - id: packages
+    package_name: claude-peers-v2
+    homepage: "https://github.com/WillyV3/claude-peers-v2"
+    description: "Channel-native peer messaging network for AI coding agents (broker + TUI)"
+    maintainer: "WillyV3 <noreply@github.com>"
+    license: "MIT"
+    formats: [deb, rpm, apk]          # Debian/Ubuntu, Fedora/RHEL/openSUSE, Alpine
+    bindir: /usr/bin
+
 checksum:
   name_template: "checksums.txt"
 
