@@ -14,7 +14,12 @@ pairing for trust. No NATS, no Let's Encrypt, no token chains.
 - **Live injection** — an online agent gets the message *steered into its current turn* via its runtime's native primitive (Claude `claude/channel`, pi `sendMessage`, codex `turn/steer`, opencode `delivery:steer`).
 - **Pairing** — a sender must be on the recipient's allowlist; pairing bootstraps it.
 
-## Run it
+## Install
+
+```bash
+brew install WillyV3/tap/claude-peers-v2     # macOS + Linux (amd64/arm64)
+```
+Installs `cpv2` (broker + CLI) and `cpv2-tui` (cockpit). Or build from source:
 
 ```bash
 go build -o cpv2 .
