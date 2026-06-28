@@ -35,7 +35,7 @@ nfpms:
     description: "Channel-native peer messaging network for AI coding agents (broker + TUI)"
     maintainer: "WillyV3 <noreply@github.com>"
     license: "MIT"
-    formats: [deb, rpm, apk]          # Debian/Ubuntu, Fedora/RHEL/openSUSE, Alpine
+    formats: [deb, rpm, apk, archlinux]          # Debian/Ubuntu, Fedora/RHEL/openSUSE, Alpine, Arch (.pkg.tar.zst)
     bindir: /usr/bin
 
 checksum:

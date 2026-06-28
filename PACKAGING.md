@@ -11,14 +11,16 @@ Releases are cut with [GoReleaser](https://goreleaser.com): `goreleaser release 
 | **Debian/Ubuntu** | `sudo dpkg -i claude-peers-v2_*_linux_amd64.deb` | amd64/arm64 |
 | **Fedora/RHEL/openSUSE** | `sudo rpm -i claude-peers-v2_*_linux_amd64.rpm` | amd64/arm64 |
 | **Alpine** | `sudo apk add --allow-untrusted claude-peers-v2_*_linux_amd64.apk` | amd64/arm64 |
+| **Arch / Omarchy** | `sudo pacman -U claude-peers-v2_*_linux_amd64.pkg.tar.zst` | amd64/arm64 |
 | **raw binaries** | download the `.tar.gz` from Releases | macOS + Linux, amd64/arm64 |
 
-`.deb/.rpm/.apk` are attached to each GitHub Release. All built pure-Go (no cgo).
+`.deb/.rpm/.apk/.pkg.tar.zst` are attached to each GitHub Release. All built pure-Go (no cgo).
+The Arch `.pkg.tar.zst` is the no-AUR path: download from Releases and `pacman -U` it directly.
 
-## AUR (yay) — needs a one-time AUR account
+## AUR (yay) — optional; the Arch `.pkg.tar.zst` above is the simpler path
 
-Blocked autonomously: the release host's SSH key isn't registered with an AUR account.
-One-time setup, then it publishes on every release:
+Not used by default (the Arch package on each Release covers `pacman -U` with no account).
+If you ever want `yay -S` convenience: it needs a one-time AUR account, then publishes per release:
 
 1. Create an AUR account at https://aur.archlinux.org and add your SSH **public** key
    (`~/.ssh/id_ed25519.pub`) under your AUR profile.
