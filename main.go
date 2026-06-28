@@ -450,8 +450,14 @@ func main() {
 		os.Exit(cmdApprove(os.Args[2:]))
 	case "peers":
 		os.Exit(cmdPeers(os.Args[2:]))
+	case "statusline":
+		os.Exit(cmdStatusLine(os.Args[2:]))
+	case "setup":
+		os.Exit(cmdSetup(os.Args[2:]))
+	case "run":
+		os.Exit(cmdRun(os.Args[2:]))
 	default:
-		fmt.Fprintln(os.Stderr, "usage: cpv2 <serve|send|pair|approve|peers> [options]")
+		fmt.Fprintln(os.Stderr, "usage: cpv2 <serve|send|pair|approve|peers|statusline|setup|run> [options]")
 		os.Exit(2)
 	}
 }

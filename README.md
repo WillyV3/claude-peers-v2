@@ -37,11 +37,31 @@ go build -o cpv2 .
 ## CLI
 
 ```bash
+cpv2 setup --agent claude --name keeper          # detect agents + wire the chosen one (no-clobber config merge)
+cpv2 run                                          # exec claude with the peers dev-channel loaded
+cpv2 statusline                                   # one-line peer status (for a coding-agent statusline)
 cpv2 pair    --from daemon --to keeper          # → prints a code
 cpv2 approve --owner keeper --code <code>        # run as the target
 cpv2 send    --from daemon --to keeper "build is green"
 cpv2 peers                                       # table of who's online
 ```
+
+### Statusline
+
+`cpv2 statusline` prints one compact line so a session always knows its peer state
+(wire it via `cpv2 setup`). It never hangs the host (500ms broker cap) and never errors out:
+
+```
+● peers: keeper · 4 online                       # registered + online
+◌ peers: keeper · offline                        # configured but channel not connected
+○ peers: keeper · not registered                 # name not on the broker
+○ peers: broker down                             # broker unreachable
+● peers: keeper · 4 online · ⚠ also here: jim     # another session is live in THIS cwd
+○ peers: ghost · not registered · ⚠ also here: alice, jim   # opened in an occupied dir, unregistered
+```
+
+The `⚠ also here` warning surfaces same-cwd session collisions, so opening a session in an
+already-occupied directory is visible instead of silently confusing.
 
 ## Integrate an automation (the hook)
 
