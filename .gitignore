@@ -9,3 +9,4 @@ adapters/node_modules/
 # scratch
 /tmp/
 /claude-peers-v2
+dist/
