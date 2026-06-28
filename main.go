@@ -13,6 +13,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
+const usage = "usage: cpv2 <serve|send|pair|approve|peers|statusline|setup|run|version> [options]"
+
 // onlineSeconds: a peer is "online" if seen within this window. Also the
 // staleness cutoff for reclaiming an agent name from a session that went quiet.
 const onlineSeconds int64 = 30
@@ -456,8 +461,12 @@ func main() {
 		os.Exit(cmdSetup(os.Args[2:]))
 	case "run":
 		os.Exit(cmdRun(os.Args[2:]))
+	case "version", "-v", "--version":
+		fmt.Println("cpv2", version)
+	case "help", "-h", "--help":
+		fmt.Println(usage)
 	default:
-		fmt.Fprintln(os.Stderr, "usage: cpv2 <serve|send|pair|approve|peers|statusline|setup|run> [options]")
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(2)
 	}
 }

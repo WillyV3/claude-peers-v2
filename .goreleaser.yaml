@@ -1,0 +1,54 @@
+version: 2
+
+project_name: claude-peers-v2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: cpv2
+    main: .
+    binary: cpv2
+    env: [CGO_ENABLED=0]            # modernc.org/sqlite is pure Go
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+  - id: cpv2-tui
+    main: ./tui
+    binary: cpv2-tui
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^chore:"]
+
+brews:
+  - name: claude-peers-v2
+    repository:
+      owner: WillyV3
+      name: homebrew-tap
+      branch: main
+    directory: Formula
+    homepage: "https://github.com/WillyV3/claude-peers-v2"
+    description: "Channel-native peer messaging network for AI coding agents (broker + TUI)"
+    license: "MIT"
+    install: |
+      bin.install "cpv2"
+      bin.install "cpv2-tui"
+    test: |
+      system "#{bin}/cpv2", "version"
