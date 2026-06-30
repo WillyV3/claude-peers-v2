@@ -71,6 +71,11 @@ func NewBroker(dsn string) (*Broker, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Serialize all DB access through one connection. SQLite allows only one
+	// writer; under heavy concurrent writes (e.g. a registration storm) extra
+	// writers otherwise hit "database is locked" past busy_timeout and 500.
+	// One conn makes writes queue in Go instead of failing. Loads here are tiny.
+	db.SetMaxOpenConns(1)
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
